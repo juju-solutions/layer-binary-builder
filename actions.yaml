@@ -1,0 +1,4 @@
+build:
+  description: Builds the binary needed.
+s3upload:
+  description: Upload binary file to S3.

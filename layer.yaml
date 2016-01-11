@@ -1,0 +1,13 @@
+includes: ['layer:basic']
+options:
+  hadoop-client:
+    users:
+      gobblin:
+        groups: ['hadoop']
+    dirs:
+      gobblin:
+        path: '/usr/lib/gobblin'
+        owner: 'gobblin'
+        group: 'hadoop'
+      outputdir:
+        path: '/gobblin/work'

@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+import os
+import shutil
+import hashlib
+import base64
+from git import Repo, Git
+from charmhelpers.core import hookenv
+from subprocess import check_call
+
+
+WORKSPACE = '/tmp/workspace'
+GOBBLIN_GIT = 'https://github.com/linkedin/gobblin.git'
+RELEASE_TAG = '0.6.0'
+HADDOP_VER = "2.7.1"
+
+
+def checkout_source():
+    hookenv.log("Fetching source from {}".format(GOBBLIN_GIT))
+    shutil.rmtree(WORKSPACE, ignore_errors=True)
+    os.mkdir(WORKSPACE)
+    Repo.clone_from(GOBBLIN_GIT, "".join([WORKSPACE, '/', 'gobblin']))
+    g = Git("".join([WORKSPACE, '/', 'gobblin']))
+    g.checkout(''.join(['tags/gobblin_', RELEASE_TAG]))    
+
+
+def build_binary():
+    hookenv.log("Building binaries for Haddop version {}".format(HADDOP_VER))
+    os.chdir("".join([WORKSPACE, '/', 'gobblin']))
+    check_call(['./gradlew', 'clean', 'build', '-PuseHadoop2', '-PhadoopVersion={}'.format(HADDOP_VER)])
+
+
+def apply_patches():
+    hookenv.log("Applying patches")
+    os.chdir(WORKSPACE)    
+    shutil.rmtree("".join([WORKSPACE, 'gobblin-dist']), ignore_errors=True)
+    check_call(['cp', './gobblin/gobblin-dist.tar.gz', "."])
+    check_call(['tar', '-zxvf', 'gobblin-dist.tar.gz'])    
+    inplace_change(''.join([WORKSPACE, '/gobblin-dist/bin/gobblin-mapreduce.sh']), '''#!/bin/sh''', '''#!/bin/bash''')
+
+    if os.path.isfile(''.join([WORKSPACE, '/gobblin-dist/lib/guava-15.0.jar'])):
+        inplace_change(''.join([WORKSPACE, '/gobblin-dist/bin/gobblin-mapreduce.sh']), '''/guava-18.0.jar''', '''/guava-15.0.jar''')
+
+        
+def repackage():
+    hookenv.log("Repackaging binaries")
+    os.chdir(WORKSPACE)    
+    try:
+        os.remove('gobblin-dist.tar.gz')
+    except:
+        pass
+    check_call(['tar', '-cvzf', 'gobblin-dist.tar.gz', 'gobblin-dist'])
+    digest = get_hash('gobblin-dist.tar.gz')
+    outputfilename = ''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADDOP_VER, "-", digest[:7], ".tar.gz"])    
+    os.renames('gobblin-dist.tar.gz', outputfilename)
+    return digest,''.join([WORKSPACE, '/', outputfilename])
+
+    
+def get_hash(file_name):
+    with open(file_name, 'rb') as f:
+        m = hashlib.sha256()
+        m.update(f.read())
+        res = m.hexdigest()
+    return res
+
+
+def inplace_change(filename, old_string, new_string):
+    s=open(filename).read()
+    if old_string in s:
+        hookenv.log('Changing "{old_string}" to "{new_string}"'.format(**locals()))
+        s=s.replace(old_string, new_string)
+        f=open(filename, 'w')
+        f.write(s)
+        f.flush()
+        f.close()
+    else:
+        hookenv.log('No occurances of "{old_string}" found.'.format(**locals()))
+
+
+hookenv.status_set('maintenance', 'Checking out source')
+checkout_source()
+hookenv.status_set('maintenance', 'Building binary')
+build_binary()
+hookenv.status_set('maintenance', 'Finishing packaging')
+apply_patches()
+shadigest,distfile = repackage()
+hookenv.action_set({'sha256sum': shadigest})
+hookenv.action_set({'binary': distfile})
+hookenv.status_set('active', 'Ready')
