@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import tinys3
 import json
 from charmhelpers.core import hookenv

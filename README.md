@@ -1,51 +1,61 @@
 
-## TODO (kjakal) Write the README! Overview
+## Overview
 
-"Gobblin is a universal data ingestion framework for extracting, transforming,
-and loading large volume of data from a variety of data sources, 
-e.g., databases, rest APIs, FTP/SFTP servers, filers, etc., onto Hadoop."
-from the [Gobblin wiki](https://github.com/linkedin/gobblin/wiki) 
+This charm is used to build the binaries of Gobblin and upload them to S3.
+Goblin is a universal data ingestion framework.
+[Gobblin wiki](https://github.com/linkedin/gobblin/wiki) 
 
 ## Usage
-This charm is uses the Hadoob base layer and the HDFS interface to pull its dependencies
-and act as a client to a Hadoop namenode. Here is how to deploy the Hadoop infrastructure:
+Upon deployment the charm installs the dependencies needed to build and upload the
+Gobblin binaries:
 
-    juju deploy apache-hadoop-datanode datanode
-    juju deploy apache-hadoop-namenode namenode
-    juju deploy apache-hadoop-nodemanager nodemgr
-    juju deploy apache-hadoop-resourcemanager resourcemgr
-
-    juju add-relation namenode datanode
-    juju add-relation resourcemgr nodemgr
-    juju add-relation resourcemgr namenode
-
-
-Deploy the Gobblin charm and relate it to tha neme node:
- 
-    juju deploy gobblin
-    juju add-relation gobblin namenode
+    juju deploy gobblin-binary-builder gbuilder
 
 
 ## Testing the deployment
 
-### Smoke test Gobblin
-From the Gobblin unit, start the wikipedia ingestion demo job as the `gobblin` user:
+Two actions are available, one for building the binary and one for uploading to S3.
 
-    juju ssh gobblin/0
-    cd /tmp
-    sudo su gobblin -c "gobblin-mapreduce.sh --conf wikipedia.pull --jars /usr/lib/gobblin/lib/gobblin-example.jar"
+### Building Action
+Trigger the build action like this:
 
-The output will be in hdfs under /gobblin/work/job-output/gobblin/example/wikipedia/WikipediaOutput/<Your_Job_Id>
+    juju action do gbuilder/0 build
 
-List and get the job output file in avro format.
+The action options available are:
 
-    hdfs dfs -ls /gobblin/work/job-output/gobblin/example/wikipedia/WikipediaOutput/<Your_Job_Id>
-    hdfs dfs -get /gobblin/work/job-output/gobblin/example/wikipedia/WikipediaOutput/<Your_Job_Id>/<Output.avro>
+    release: The release version. This string is part of the Gobblin source release tag
+    hadoop-version: The Hadoop version we should build Gobblin against
+    
+During build, the status message of the charm should change from 'Ready' to 'Checking out source',
+'Building binary', 'Finishing packaging' and become 'Ready' again.
 
-Transform to JSON.
+Fetching the result of the action yields the produced binary and the sha256 digest, eg.
 
-    curl -O http://central.maven.org/maven2/org/apache/avro/avro-tools/1.7.7/avro-tools-1.7.7.jar
-    java -jar avro-tools-1.7.7.jar tojson --pretty <Output.avro> > output.json
+    juju action fetch 9889f266-6634-4e78-85e0-e6f8c3e47522
+
+Returns:
+
+    results:
+      binary: /tmp/workspace/gobblin-dist-0.6.0_hadoop-2.7.1-9401863.tar.gz
+      sha256sum: 94018632b4b6e5eb9cfeea85b76f0a38d96fbf0ded0748b824a5bb05f21da57e
+    status: completed
+
+At this point you can fetch the binary using juju scp facilities:
+    
+    juju scp gbuilder/0:/tmp/workspace/gobblin-dist-0.6.0_hadoop-2.7.1-9401863.tar.gz .
+
+    
+### Uploading a binary
+Triggering the uploading action is done like this:
+
+    juju action do gbuilder/0 awsupload "s3-access-key=<your key> s3-secret-key=<your secret key> bucket=<the bucket name>"
+
+In addition to the above three parameters (s3-access-key, s3-secret-key and bucket)
+the user has also the option of specifying the region/AWS endpoint via the optional 'aws-endpoint' parameter.
+
+As soon as the uploading action is triggered, the status message of the charm should change to 'Uploading binary'
+and will become 'Ready' when the uploading finishes.
+
 
 ## Contact Information
 
