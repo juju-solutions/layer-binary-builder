@@ -1,4 +1,28 @@
 build:
   description: Builds the binary needed.
-s3upload:
-  description: Upload binary file to S3.
+  params:
+    release:
+      default: "0.6.0"
+      type: string
+      description: The release version. This string is part of the Gobblin source release tag
+    hadoop-version:
+      default: "2.7.1"
+      type: string
+      description: The Hadoop version we should build Gobblin against
+awsupload:
+  description: Upload binary file to S3
+  params:
+    s3-access-key: 
+      type: string
+      description: Your S3 access key
+    s3-secret-key: 
+      type: string
+      description: Your S3 secret key
+    bucket:
+      type: string
+      description: The bucket were you should upload your file to
+    aws-endpoint:
+      type: string
+      default: "s3.amazonaws.com"
+      description: The AWS endpoint
+  required: [s3-access-key,s3-secret-key,bucket]

@@ -2,16 +2,15 @@
 import os
 import shutil
 import hashlib
-import base64
 from git import Repo, Git
 from charmhelpers.core import hookenv
 from subprocess import check_call
-
+import json
 
 WORKSPACE = '/tmp/workspace'
 GOBBLIN_GIT = 'https://github.com/linkedin/gobblin.git'
-RELEASE_TAG = '0.6.0'
-HADDOP_VER = "2.7.1"
+RELEASE_TAG = hookenv.action_get("release")
+HADDOP_VER = hookenv.action_get("hadoop-version")
 
 
 def checkout_source():
@@ -49,10 +48,18 @@ def repackage():
     except:
         pass
     check_call(['tar', '-cvzf', 'gobblin-dist.tar.gz', 'gobblin-dist'])
-    digest = get_hash('gobblin-dist.tar.gz')
-    outputfilename = ''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADDOP_VER, "-", digest[:7], ".tar.gz"])    
+    digest = get_hash('gobblin-dist.tar.gz')    
+    outputfilename = get_filename(digest)    
     os.renames('gobblin-dist.tar.gz', outputfilename)
     return digest,''.join([WORKSPACE, '/', outputfilename])
+
+
+def store_metadata(digest):
+    outputfilename = get_filename(digest)    
+    metadata = {'FileName' : outputfilename,
+                'Workspace' : WORKSPACE}
+    with open(''.join([WORKSPACE, "/.metadata"]), 'w') as f:
+        json.dump(metadata, f)
 
     
 def get_hash(file_name):
@@ -61,6 +68,11 @@ def get_hash(file_name):
         m.update(f.read())
         res = m.hexdigest()
     return res
+
+
+def get_filename(digest):
+    outputfilename = ''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADDOP_VER, "-", digest[:7], ".tar.gz"])    
+    return outputfilename
 
 
 def inplace_change(filename, old_string, new_string):
@@ -76,13 +88,16 @@ def inplace_change(filename, old_string, new_string):
         hookenv.log('No occurances of "{old_string}" found.'.format(**locals()))
 
 
-hookenv.status_set('maintenance', 'Checking out source')
-checkout_source()
-hookenv.status_set('maintenance', 'Building binary')
-build_binary()
-hookenv.status_set('maintenance', 'Finishing packaging')
-apply_patches()
-shadigest,distfile = repackage()
-hookenv.action_set({'sha256sum': shadigest})
-hookenv.action_set({'binary': distfile})
-hookenv.status_set('active', 'Ready')
+
+if __name__ == '__main__':
+    hookenv.status_set('maintenance', 'Checking out source')
+    checkout_source()
+    hookenv.status_set('maintenance', 'Building binary')
+    build_binary()
+    hookenv.status_set('maintenance', 'Finishing packaging')
+    apply_patches()
+    shadigest,distfile = repackage()
+    store_metadata(shadigest)
+    hookenv.action_set({'sha256sum': shadigest})
+    hookenv.action_set({'binary': distfile})
+    hookenv.status_set('active', 'Ready')

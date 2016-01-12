@@ -8,9 +8,10 @@ from charmhelpers.fetch import apt_install
 @when_not('bootstrapped')
 def bootstrap():
     hookenv.status_set('maintenance', 'Installing base resources')
-    apt_install(['git', 'default-jre', 'openjdk-7-jdk', 'tinys3'])
+    apt_install(['git', 'default-jre', 'openjdk-7-jdk'])
     check_call(['pip', 'install', '-U', 'pip'])  # 1.5.1 (trusty) pip fails on --download with git repos
     set_state('bootstrapped')
+
 
 @when('bootstrapped')
 def ready_to_act():
