@@ -48,7 +48,7 @@ At this point you can fetch the binary using juju scp facilities:
 ### Uploading a binary
 Triggering the uploading action is done like this:
 
-    juju action do gbuilder/0 awsupload "s3-access-key=<your key> s3-secret-key=<your secret key> bucket=<the bucket name>"
+    juju action do gbuilder/0 awsupload s3-access-key=<your_key> s3-secret-key=<your_secret_key> bucket=<bucket_name>
 
 In addition to the above three parameters (s3-access-key, s3-secret-key and bucket)
 the user has also the option of specifying the region/AWS endpoint via the optional 'aws-endpoint' parameter.

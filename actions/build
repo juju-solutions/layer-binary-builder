@@ -8,40 +8,54 @@ from charmhelpers.core import hookenv
 from subprocess import check_call
 import json
 
-WORKSPACE = '/tmp/workspace'
+WORKSPACE = os.path.join('/tmp', 'workspace')
+SOURCE = os.path.join(WORKSPACE, 'gobblin')
 GOBBLIN_GIT = 'https://github.com/linkedin/gobblin.git'
 RELEASE_TAG = hookenv.action_get("release")
 HADDOP_VER = hookenv.action_get("hadoop-version")
 
 
 def checkout_source():
+    '''
+    Checkout source and switch to the right tag
+    '''
     hookenv.log("Fetching source from {}".format(GOBBLIN_GIT))
     shutil.rmtree(WORKSPACE, ignore_errors=True)
     os.mkdir(WORKSPACE)
-    Repo.clone_from(GOBBLIN_GIT, "".join([WORKSPACE, '/', 'gobblin']))
-    g = Git("".join([WORKSPACE, '/', 'gobblin']))
+    Repo.clone_from(GOBBLIN_GIT, SOURCE)
+    g = Git(SOURCE)
     g.checkout(''.join(['tags/gobblin_', RELEASE_TAG]))    
 
 
 def build_binary():
     hookenv.log("Building binaries for Haddop version {}".format(HADDOP_VER))
-    os.chdir("".join([WORKSPACE, '/', 'gobblin']))
+    os.chdir(SOURCE)
     check_call(['./gradlew', 'clean', 'build', '-PuseHadoop2', '-PhadoopVersion={}'.format(HADDOP_VER)])
 
 
 def apply_patches():
+    '''
+    We apply two patches that are really needed for the 0.5.0 version. a) use bash instead of sh and b) fix guava version
+    '''
     hookenv.log("Applying patches")
     os.chdir(WORKSPACE)    
-    shutil.rmtree("".join([WORKSPACE, 'gobblin-dist']), ignore_errors=True)
-    check_call(['cp', './gobblin/gobblin-dist.tar.gz', "."])
+    shutil.rmtree(os.path.join(WORKSPACE, 'gobblin-dist'), ignore_errors=True)
+    check_call(['cp', os.path.join(SOURCE, 'gobblin-dist.tar.gz'), "."])
     check_call(['tar', '-zxvf', 'gobblin-dist.tar.gz'])    
-    inplace_change(''.join([WORKSPACE, '/gobblin-dist/bin/gobblin-mapreduce.sh']), '''#!/bin/sh''', '''#!/bin/bash''')
+    
+    # We always apply this patch    
+    inplace_change(os.path.join(WORKSPACE, 'gobblin-dist/bin/gobblin-mapreduce.sh'), '''#!/bin/sh''', '''#!/bin/bash''')
 
-    if os.path.isfile(''.join([WORKSPACE, '/gobblin-dist/lib/guava-15.0.jar'])):
-        inplace_change(''.join([WORKSPACE, '/gobblin-dist/bin/gobblin-mapreduce.sh']), '''/guava-18.0.jar''', '''/guava-15.0.jar''')
+    # We first check that the guava jar is in the version we expect. In future releases this might
+    # change so we will not need to apply the fix
+    if os.path.isfile(os.path.join(WORKSPACE, 'gobblin-dist/lib/guava-15.0.jar')):
+        inplace_change(os.path.join(WORKSPACE, 'gobblin-dist/bin/gobblin-mapreduce.sh'), '''/guava-18.0.jar''', '''/guava-15.0.jar''')
 
         
 def repackage():
+    '''
+    Create the tar.gz and build and compute the sha 256 digest
+    '''
     hookenv.log("Repackaging binaries")
     os.chdir(WORKSPACE)    
     try:
@@ -52,18 +66,24 @@ def repackage():
     digest = get_hash('gobblin-dist.tar.gz')    
     outputfilename = get_filename(digest)    
     os.renames('gobblin-dist.tar.gz', outputfilename)
-    return digest,''.join([WORKSPACE, '/', outputfilename])
+    return digest, os.path.join(WORKSPACE, outputfilename)
 
 
 def store_metadata(digest):
+    '''
+    Storing metadata for the build. Note that we overwrite the metadata file every time we build.  
+    '''
     outputfilename = get_filename(digest)    
     metadata = {'FileName' : outputfilename,
                 'Workspace' : WORKSPACE}
-    with open(''.join([WORKSPACE, "/.metadata"]), 'w') as f:
+    with open(os.path.join(WORKSPACE, ".metadata"), 'w') as f:
         json.dump(metadata, f)
 
     
 def get_hash(file_name):
+    '''
+    Get the sha 256 digest
+    '''
     with open(file_name, 'rb') as f:
         m = hashlib.sha256()
         m.update(f.read())
