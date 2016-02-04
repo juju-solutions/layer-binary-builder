@@ -1,13 +1,7 @@
 includes: ['layer:basic']
 options:
-  hadoop-client:
-    users:
-      gobblin:
-        groups: ['hadoop']
-    dirs:
-      gobblin:
-        path: '/usr/lib/gobblin'
-        owner: 'gobblin'
-        group: 'hadoop'
-      outputdir:
-        path: '/gobblin/work'
+  basic:
+    packages:
+      - git
+      - default-jre
+      - openjdk-7-jdk
