@@ -1,4 +1,4 @@
-build:
+build-gobblin:
   description: Builds the binary needed.
   params:
     release:
@@ -26,3 +26,10 @@ awsupload:
       default: "s3.amazonaws.com"
       description: The AWS endpoint
   required: [s3-access-key,s3-secret-key,bucket]
+build-hue:
+  description: Builds the Hue binary.
+  params:
+    release-tag:
+      default: "cdh5.5.2-release"
+      type: string
+      description: The release tag.  

@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+
+import os
+import shutil
+import hashlib
+from git import Repo, Git
+from charmhelpers.core import hookenv
+from subprocess import check_call, Popen, check_output, PIPE
+import json
+import buildutils
+
+HUE_GIT = 'https://github.com/cloudera/hue.git'
+RELEASE_TAG = hookenv.action_get("release-tag")
+
+
+def get_prerequisits(builder):
+    builder.add_apt_repository('ppa:webupd8team/java') 
+    # install oracle java unattended
+    ps = Popen(('echo', 'oracle-java8-installer shared/accepted-oracle-license-v1-1 select true'), stdout=PIPE)
+    output = check_output(('debconf-set-selections'), stdin=ps.stdout)
+    ps.wait()   
+    package_names = ['ant',
+                      'git',
+                      'gcc',
+                      'g++',
+                      'libkrb5-dev',
+                      'libmysqlclient-dev',
+                      'libssl-dev',
+                      'libsasl2-dev',
+                      'libsasl2-modules-gssapi-mit',
+                      'libsqlite3-dev',
+                      'libtidy-0.99-0',
+                      'libxml2-dev',
+                      'libxslt1-dev',
+                      'make',
+                      'libldap2-dev',
+                      'maven',
+                      'python-dev',
+                      'python-setuptools',
+                      'libgmp3-dev',
+                      'oracle-java7-installer',
+                      'oracle-java7-set-default',
+                      'asciidoc']
+    builder.install_apt_packages(package_names)
+
+
+def checkout_source(builder):
+    '''
+    Checkout source and switch to the right tag
+    '''
+    hookenv.log("Fetching source from {}".format(HUE_GIT))
+    checkout = ''.join(['tags/', RELEASE_TAG])
+    builder.checkout_source(HUE_GIT, checkout)
+
+
+def build_binary(builder):
+    hookenv.log("Building binaries for Hue {}".format(RELEASE_TAG))
+    build_command = ['make', 'prod']
+    builder.build_binary(build_command)
+
+        
+def package(builder):
+    '''
+    Create the tar.gz and build and compute the sha 256 digest
+    '''
+    hookenv.log("Packaging binaries")
+    os.chdir(builder.workspace)    
+    try:
+        os.remove('gobblin-dist.tar.gz')
+    except:
+        pass
+    check_call(['tar', '-cvzf', 'gobblin-dist.tar.gz', 'gobblin-dist'])
+    produced_file = os.path.join(builder.workspace, 'gobblin-dist.tar.gz')
+    
+    # {} will be replace with the first digits of the digest
+    digest, final_file = builder.set_output_file(produced_file)
+    return digest, final_file
+
+
+if __name__ == '__main__':
+    final_filename_template = "output"
+    #''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADDOP_VER, "-{}.tar.gz"])
+    builder = buildutils.BuildHelper("hue", final_filename_template)
+    hookenv.status_set('maintenance', 'Fetching prerequisits')
+    get_prerequisits(builder)
+    hookenv.status_set('maintenance', 'Checking out source')
+    checkout_source(builder)
+    hookenv.status_set('maintenance', 'Building binary')
+    build_binary(builder)
+    hookenv.status_set('maintenance', 'Finishing packaging')
+    apply_patches(builder)
+    #shadigest,distfile = repackage(builder)
+    hookenv.action_set({'sha256sum': shadigest})
+    hookenv.action_set({'binary': distfile})
+    hookenv.status_set('active', 'Ready')
