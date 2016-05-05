@@ -11,12 +11,12 @@ import buildutils
 
 HUE_GIT = 'https://github.com/cloudera/hue.git'
 RELEASE_TAG = hookenv.action_get("release-tag")
-
+SPARK_VERSION = hookenv.action_get("spark-version")
 
 def get_prerequisits(builder):
     builder.add_apt_repository('ppa:webupd8team/java') 
     # install oracle java unattended
-    ps = Popen(('echo', 'oracle-java8-installer shared/accepted-oracle-license-v1-1 select true'), stdout=PIPE)
+    ps = Popen(('echo', 'oracle-java7-installer shared/accepted-oracle-license-v1-1 select true'), stdout=PIPE)
     output = check_output(('debconf-set-selections'), stdin=ps.stdout)
     ps.wait()   
     package_names = ['ant',
@@ -56,30 +56,27 @@ def checkout_source(builder):
 def build_binary(builder):
     hookenv.log("Building binaries for Hue {}".format(RELEASE_TAG))
     build_command = ['make', 'prod']
-    builder.build_binary(build_command)
+    environemnt = dict(os.environ.copy(),
+                       'MAVEN_OPTIONS="-X -Dspark.version={}"'.format(SPARK_VERSION))
+    builder.build_binary(build_command, env=environemnt)
 
         
 def package(builder):
     '''
     Create the tar.gz and build and compute the sha 256 digest
     '''
-    hookenv.log("Packaging binaries")
-    os.chdir(builder.workspace)    
-    try:
-        os.remove('gobblin-dist.tar.gz')
-    except:
-        pass
-    check_call(['tar', '-cvzf', 'gobblin-dist.tar.gz', 'gobblin-dist'])
-    produced_file = os.path.join(builder.workspace, 'gobblin-dist.tar.gz')
-    
+    hookenv.log("Packaging binary")
+    expected_output_dir = os.join(builder.workspace, "build/release/prod")
+    produced_file = [f for f in os.listdir(expected_output_dir) 
+                 if os.path.isfile(os.path.join(expected_output_dir, f))]
+    full_path = os.path.join(expected_output_dir, produced_file[0])
     # {} will be replace with the first digits of the digest
-    digest, final_file = builder.set_output_file(produced_file)
+    digest, final_file = builder.set_output_file(full_path)
     return digest, final_file
 
 
 if __name__ == '__main__':
-    final_filename_template = "output"
-    #''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADDOP_VER, "-{}.tar.gz"])
+    final_filename_template = ''.join(["hue-", RELEASE_TAG, "_spark-", SPARK_VERSION, "-{}.tar.gz"])
     builder = buildutils.BuildHelper("hue", final_filename_template)
     hookenv.status_set('maintenance', 'Fetching prerequisits')
     get_prerequisits(builder)
@@ -87,9 +84,8 @@ if __name__ == '__main__':
     checkout_source(builder)
     hookenv.status_set('maintenance', 'Building binary')
     build_binary(builder)
-    hookenv.status_set('maintenance', 'Finishing packaging')
-    apply_patches(builder)
-    #shadigest,distfile = repackage(builder)
+    hookenv.status_set('maintenance', 'Finish packaging')
+    shadigest,distfile = package(builder)
     hookenv.action_set({'sha256sum': shadigest})
     hookenv.action_set({'binary': distfile})
     hookenv.status_set('active', 'Ready')

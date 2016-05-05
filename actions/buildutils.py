@@ -6,6 +6,7 @@ from subprocess import check_call
 import json
 import apt
 from charmhelpers.core import hookenv
+import time
 
 class BuildHelper:
     
@@ -15,12 +16,12 @@ class BuildHelper:
         self.final_filename_template = final_filename_template
         self.source_path =  os.path.join(self.workspace, self.target_name)
 
-
     def add_apt_repository(self, repository):        
         check_call(['apt-add-repository', repository])
-
+        time.sleep(5)
 
     def install_apt_packages(self, package_names):
+        time.sleep(5)
         cache = apt.cache.Cache()
         cache.update()
     
@@ -56,6 +57,7 @@ class BuildHelper:
     def set_output_file(self, produced_file):
         digest = self.get_hash(produced_file)    
         output_filename = self.get_filename(digest)
+        os.chdir(self.workspace)
         os.renames(produced_file, output_filename)
         self.store_metadata(digest)
         return digest, os.path.join(self.workspace, output_filename)

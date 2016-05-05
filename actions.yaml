@@ -32,4 +32,19 @@ build-hue:
     release-tag:
       default: "cdh5.5.2-release"
       type: string
-      description: The release tag.  
+      description: The release tag.
+    spark-version:
+      default: "1.5.0"
+      type: string
+      description: Spark version to build against.
+build-cassandra-spark-connector:
+  description: Builds the Cassandra Spark Connector.
+  params:
+    release-tag:
+      default: "v1.6.0-M2"
+      type: string
+      description: The release tag.
+    cassandra-version:
+      default: "2.2"
+      type: string
+      description: Cassandra version to build against.
