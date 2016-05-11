@@ -1,7 +1,1 @@
 includes: ['layer:basic']
-options:
-  basic:
-    packages:
-      - git
-      - default-jre
-      - openjdk-7-jdk

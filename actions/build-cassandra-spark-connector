@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+
+import os
+from charmhelpers.core import hookenv
+import buildutils
+
+GIT_REPO = 'https://github.com/datastax/spark-cassandra-connector'
+RELEASE_TAG = hookenv.action_get("release-tag")
+CASSANDRA_VERSION = hookenv.action_get("cassandra-version")
+
+def get_prerequisits(builder):
+    package_names = ['git', 'openjdk-7-jdk']
+    builder.install_apt_packages(package_names)
+
+
+def checkout_source(builder):
+    '''
+    Checkout source and switch to the right tag
+    '''
+    hookenv.log("Fetching source from {}".format(GIT_REPO))
+    checkout = ''.join(['tags/', RELEASE_TAG])
+    builder.checkout_source(GIT_REPO, checkout)
+
+
+def build_binary(builder):
+    hookenv.log("Building binaries for Spark-Cassandra Connector {}".format(RELEASE_TAG))
+    build_command = ['./sbt/sbt', 'assembly', '-Dtest.cassandra.version={}'.format(CASSANDRA_VERSION)]
+    builder.build_binary(build_command)
+
+
+def package(builder):
+    '''
+    Create the jar and build and compute the sha 256 digest
+    '''
+    hookenv.log("Packaging binary")
+    expected_output_dir = os.path.join(builder.workspace, "connector/spark-cassandra-connector/target/scala-2.10")
+    produced_file = [f for f in os.listdir(expected_output_dir)
+                 if os.path.isfile(os.path.join(expected_output_dir, f))]
+    full_path = os.path.join(expected_output_dir, produced_file[0])
+    # {} will be replace with the first digits of the digest
+    digest, final_file = builder.set_output_file(full_path)
+    return digest, final_file
+
+
+if __name__ == '__main__':
+    final_filename_template = ''.join(["connector-cassandra-", CASSANDRA_VERSION, "-spark-", RELEASE_TAG, "-{}.jar"])
+    builder = buildutils.BuildHelper("connector", final_filename_template)
+    hookenv.status_set('maintenance', 'Fetching prerequisits')
+    get_prerequisits(builder)
+    hookenv.status_set('maintenance', 'Checking out connector source')
+    checkout_source(builder)
+    hookenv.status_set('maintenance', 'Building connector binary')
+    build_binary(builder)
+    hookenv.status_set('maintenance', 'Finish connector packaging')
+    shadigest,distfile = package(builder)
+    hookenv.action_set({'sha256sum': shadigest})
+    hookenv.action_set({'binary': distfile})
+    hookenv.status_set('active', 'Ready')

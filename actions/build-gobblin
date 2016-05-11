@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+import os
+import shutil
+import hashlib
+from git import Repo, Git
+from charmhelpers.core import hookenv
+from subprocess import check_call
+import json
+import buildutils
+
+GOBBLIN_GIT = 'https://github.com/linkedin/gobblin.git'
+RELEASE_TAG = hookenv.action_get("release")
+HADDOP_VER = hookenv.action_get("hadoop-version")
+
+
+def get_prerequisits(builder):
+    hookenv.log("Fetching required packages")
+    package_names = ['git', 'default-jre', 'openjdk-7-jdk']
+    builder.install_apt_packages(package_names)
+
+
+def checkout_source(builder):
+    '''
+    Checkout source and switch to the right tag
+    '''
+    hookenv.log("Fetching source from {}".format(GOBBLIN_GIT))
+    checkout = ''.join(['tags/gobblin_', RELEASE_TAG])
+    builder.checkout_source(GOBBLIN_GIT, checkout)
+
+
+def build_binary(builder):
+    hookenv.log("Building binaries for Haddop version {}".format(HADDOP_VER))
+    build_command = ['./gradlew', 'clean', 'build', '-PuseHadoop2', '-PhadoopVersion={}'.format(HADDOP_VER)]
+    builder.build_binary(build_command)
+
+
+def apply_patches(builder):
+    '''
+    We apply two patches that are really needed for the 0.5.0 version. a) use bash instead of sh and b) fix guava version
+    '''
+    hookenv.log("Applying patches")
+    os.chdir(builder.workspace)    
+    shutil.rmtree(os.path.join(builder.workspace, 'gobblin-dist'), ignore_errors=True)
+    check_call(['cp', os.path.join(builder.source_path, 'gobblin-dist.tar.gz'), "."])
+    check_call(['tar', '-zxvf', 'gobblin-dist.tar.gz'])    
+    
+    # We always apply this patch    
+    inplace_change(os.path.join(builder.workspace, 'gobblin-dist/bin/gobblin-mapreduce.sh'), '''#!/bin/sh''', '''#!/bin/bash''')
+
+    # We first check that the guava jar is in the version we expect. In future releases this might
+    # change so we will not need to apply the fix
+    if os.path.isfile(os.path.join(builder.workspace, 'gobblin-dist/lib/guava-15.0.jar')):
+        inplace_change(os.path.join(builder.workspace, 'gobblin-dist/bin/gobblin-mapreduce.sh'), '''/guava-18.0.jar''', '''/guava-15.0.jar''')
+
+        
+def repackage(builder):
+    '''
+    Create the tar.gz and build and compute the sha 256 digest
+    '''
+    hookenv.log("Repackaging binaries")
+    os.chdir(builder.workspace)    
+    try:
+        os.remove('gobblin-dist.tar.gz')
+    except:
+        pass
+    check_call(['tar', '-cvzf', 'gobblin-dist.tar.gz', 'gobblin-dist'])
+    produced_file = os.path.join(builder.workspace, 'gobblin-dist.tar.gz')
+    
+    # {} will be replace with the first digits of the digest
+    digest, final_file = builder.set_output_file(produced_file)
+    return digest, final_file
+
+
+def inplace_change(filename, old_string, new_string):
+    s=open(filename).read()
+    if old_string in s:
+        hookenv.log('Changing "{old_string}" to "{new_string}"'.format(**locals()))
+        s=s.replace(old_string, new_string)
+        f=open(filename, 'w')
+        f.write(s)
+        f.flush()
+        f.close()
+    else:
+        hookenv.log('No occurances of "{old_string}" found.'.format(**locals()))
+
+
+
+if __name__ == '__main__':
+    final_filename_template = ''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADDOP_VER, "-{}.tar.gz"])
+    builder = buildutils.BuildHelper("gobblin", final_filename_template)
+    hookenv.status_set('maintenance', 'Fetching prerequisits')
+    get_prerequisits(builder)
+    hookenv.status_set('maintenance', 'Checking out source')
+    checkout_source(builder)
+    hookenv.status_set('maintenance', 'Building binary')
+    build_binary(builder)
+    hookenv.status_set('maintenance', 'Finishing packaging')
+    apply_patches(builder)
+    shadigest,distfile = repackage(builder)
+    hookenv.action_set({'sha256sum': shadigest})
+    hookenv.action_set({'binary': distfile})
+    hookenv.status_set('active', 'Ready')
