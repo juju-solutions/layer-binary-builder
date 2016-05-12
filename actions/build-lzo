@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+
+import os
+import glob
+import shutil
+import hashlib
+from git import Repo, Git
+from charmhelpers.core import hookenv
+from subprocess import check_call
+import json
+import buildutils
+from shutil import copyfile
+
+
+LZO_GIT = 'https://github.com/twitter/hadoop-lzo.git'
+LZO_VERSION = hookenv.action_get("lzo-version")
+
+
+def get_prerequisits(builder):
+    hookenv.log("Fetching required packages")
+    package_names = ['git', 'default-jre', 'openjdk-7-jdk', 'liblzo2-2', 'liblzo2-dev', 'maven']
+    builder.install_apt_packages(package_names)
+
+
+def checkout_source(builder):
+    '''
+    Checkout source and switch to the right tag
+    '''
+    hookenv.log("Fetching source from {}".format(LZO_GIT))
+    builder.checkout_source(LZO_GIT)
+
+
+def build_binary(builder):
+    hookenv.log("Building lzo libraries")
+    build_command = ['mvn', 'clean', 'package']
+    builder.build_binary(build_command)
+    os.makedirs(builder.workspace + '/share/hadoop/common/lib')
+    os.makedirs(builder.workspace + '/lib/native')
+    copyfile(builder.workspace + '/target/hadoop-lzo-' + LZO_VERSION + '.jar', builder.workspace + '/share/hadoop/common/lib/hadoop-lzo-' + LZO_VERSION + '.jar')
+    for file in glob.glob(builder.workspace + '/lzo/target/native/*/lib/libgplcompression.*'):
+        copyfile(file, builder.workspace + '/lib/native/' + file.rsplit('/', 1)[1])
+
+
+def repackage(builder):
+    '''
+    Create the tar.gz and build and compute the sha 256 digest
+    '''
+    hookenv.log("Repackaging binaries")
+    os.chdir(builder.workspace)    
+    try:
+        os.remove('lzo-dist.tar.gz')
+    except:
+        pass
+    check_call(['tar', '-cvzf', 'lzo-dist.tar.gz', builder.workspace + '/share/', builder.workspace + '/lib/'])
+    produced_file = os.path.join(builder.workspace, 'lzo-dist.tar.gz')
+    
+    # {} will be replace with the first digits of the digest
+    digest, final_file = builder.set_output_file(produced_file)
+    return digest, final_file
+
+
+def inplace_change(filename, old_string, new_string):
+    s=open(filename).read()
+    if old_string in s:
+        hookenv.log('Changing "{old_string}" to "{new_string}"'.format(**locals()))
+        s=s.replace(old_string, new_string)
+        f=open(filename, 'w')
+        f.write(s)
+        f.flush()
+        f.close()
+    else:
+        hookenv.log('No occurances of "{old_string}" found.'.format(**locals()))
+
+
+
+if __name__ == '__main__':
+    final_filename_template = ''.join(["hadoop-lzo-", LZO_VERSION, "-{}.tar.gz"])
+    builder = buildutils.BuildHelper("lzo", final_filename_template)
+    hookenv.status_set('maintenance', 'Fetching prerequisits')
+    get_prerequisits(builder)
+    hookenv.status_set('maintenance', 'Checking out source')
+    checkout_source(builder)
+    hookenv.status_set('maintenance', 'Building binary')
+    build_binary(builder)
+    hookenv.status_set('maintenance', 'Finishing packaging')
+    shadigest, distfile = repackage(builder)
+    hookenv.action_set({'sha256sum': shadigest})
+    hookenv.action_set({'binary': distfile})
+    hookenv.status_set('active', 'Ready')

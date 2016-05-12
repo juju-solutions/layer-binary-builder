@@ -48,3 +48,10 @@ build-cassandra-spark-connector:
       default: "2.2"
       type: string
       description: Cassandra version to build against.
+build-lzo:
+  description: Builds lzo libs
+  params:
+    lzo-version:
+      default: "0.4.20-SNAPSHOT"
+      type: string
+      description: The lzo build version for output
