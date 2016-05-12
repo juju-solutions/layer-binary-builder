@@ -51,7 +51,7 @@ def repackage(builder):
         os.remove('lzo-dist.tar.gz')
     except:
         pass
-    check_call(['tar', '-cvzf', 'lzo-dist.tar.gz', builder.workspace + '/share/', builder.workspace + '/lib/'])
+    check_call(['tar', '-cvzf', 'lzo-dist.tar.gz', 'share/', 'lib/'])
     produced_file = os.path.join(builder.workspace, 'lzo-dist.tar.gz')
     
     # {} will be replace with the first digits of the digest
