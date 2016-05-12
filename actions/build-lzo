@@ -36,7 +36,7 @@ def build_binary(builder):
     builder.build_binary(build_command)
     os.makedirs(builder.workspace + '/share/hadoop/common/lib')
     os.makedirs(builder.workspace + '/lib/native')
-    copyfile(builder.workspace + '/target/hadoop-lzo-' + LZO_VERSION + '.jar', builder.workspace + '/share/hadoop/common/lib/hadoop-lzo-' + LZO_VERSION + '.jar')
+    copyfile(builder.workspace + '/target/hadoop-lzo-' + LZO_VERSION + '.jar', builder.workspace + '/lzo/share/hadoop/common/lib/hadoop-lzo-' + LZO_VERSION + '.jar')
     for file in glob.glob(builder.workspace + '/lzo/target/native/*/lib/libgplcompression.*'):
         copyfile(file, builder.workspace + '/lib/native/' + file.rsplit('/', 1)[1])
 
