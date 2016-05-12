@@ -11,7 +11,7 @@ import buildutils
 
 GOBBLIN_GIT = 'https://github.com/linkedin/gobblin.git'
 RELEASE_TAG = hookenv.action_get("release")
-HADDOP_VER = hookenv.action_get("hadoop-version")
+HADOOP_VER = hookenv.action_get("hadoop-version")
 
 
 def get_prerequisits(builder):
@@ -30,8 +30,8 @@ def checkout_source(builder):
 
 
 def build_binary(builder):
-    hookenv.log("Building binaries for Haddop version {}".format(HADDOP_VER))
-    build_command = ['./gradlew', 'clean', 'build', '-PuseHadoop2', '-PhadoopVersion={}'.format(HADDOP_VER)]
+    hookenv.log("Building binaries for Hadoop version {}".format(HADOOP_VER))
+    build_command = ['./gradlew', 'clean', 'build', '-PuseHadoop2', '-PhadoopVersion={}'.format(HADOOP_VER)]
     builder.build_binary(build_command)
 
 
@@ -87,7 +87,7 @@ def inplace_change(filename, old_string, new_string):
 
 
 if __name__ == '__main__':
-    final_filename_template = ''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADDOP_VER, "-{}.tar.gz"])
+    final_filename_template = ''.join(["gobblin-dist-", RELEASE_TAG, "_hadoop-", HADOOP_VER, "-{}.tar.gz"])
     builder = buildutils.BuildHelper("gobblin", final_filename_template)
     hookenv.status_set('maintenance', 'Fetching prerequisits')
     get_prerequisits(builder)
